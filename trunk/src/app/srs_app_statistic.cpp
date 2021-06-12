@@ -125,6 +125,8 @@ srs_error_t SrsStatisticStream::dumps(SrsJsonObject* obj)
     SrsJsonObject* okbps = SrsJsonAny::object();
     obj->set("kbps", okbps);
     
+    okbps->set("recv_1s", SrsJsonAny::integer(kbps->get_recv_kbps_1s()));
+    okbps->set("send_1s", SrsJsonAny::integer(kbps->get_send_kbps_1s()));
     okbps->set("recv_30s", SrsJsonAny::integer(kbps->get_recv_kbps_30s()));
     okbps->set("send_30s", SrsJsonAny::integer(kbps->get_send_kbps_30s()));
     

@@ -29,6 +29,9 @@ void SrsKbpsSlice::sample()
     srs_utime_t now = clk->now();
     int64_t total_bytes = get_total_bytes();
     
+    if (sample_1s.time < 0) {
+        sample_1s.update(total_bytes, now, 0);
+    }
     if (sample_30s.time < 0) {
         sample_30s.update(total_bytes, now, 0);
     }
@@ -42,6 +45,10 @@ void SrsKbpsSlice::sample()
         sample_60m.update(total_bytes, now, 0);
     }
     
+    if (now - sample_1s.time >= 1 * SRS_UTIME_SECONDS) {
+        int kbps = (int)((total_bytes - sample_1s.total) * 8 / srsu2ms(now - sample_1s.time));
+        sample_1s.update(total_bytes, now, kbps);
+    }
     if (now - sample_30s.time >= 30 * SRS_UTIME_SECONDS) {
         int kbps = (int)((total_bytes - sample_30s.total) * 8 / srsu2ms(now - sample_30s.time));
         sample_30s.update(total_bytes, now, kbps);
@@ -136,6 +143,16 @@ int SrsKbps::get_recv_kbps()
 
     int64_t bytes = get_recv_bytes();
     return (int)(bytes * 8 / duration);
+}
+
+int SrsKbps::get_send_kbps_1s()
+{
+    return os.sample_1s.rate;
+}
+
+int SrsKbps::get_recv_kbps_1s()
+{
+    return is.sample_1s.rate;
 }
 
 int SrsKbps::get_send_kbps_30s()
