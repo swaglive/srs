@@ -30,13 +30,12 @@ using namespace std;
 #include <srs_app_utility.hpp>
 #include <srs_app_heartbeat.hpp>
 #include <srs_app_mpegts_udp.hpp>
-#include <srs_app_rtsp.hpp>
 #include <srs_app_statistic.hpp>
 #include <srs_app_caster_flv.hpp>
 #include <srs_kernel_consts.hpp>
 #include <srs_app_coworkers.hpp>
-#include <srs_app_gb28181.hpp>
-#include <srs_app_gb28181_sip.hpp>
+#include <srs_service_log.hpp>
+#include <srs_app_latest_version.hpp>
 
 std::string srs_listener_type2string(SrsListenerType type)
 {
@@ -53,14 +52,8 @@ std::string srs_listener_type2string(SrsListenerType type)
             return "HTTP-Server";
         case SrsListenerMpegTsOverUdp:
             return "MPEG-TS over UDP";
-        case SrsListenerRtsp:
-            return "RTSP";
         case SrsListenerFlv:
             return "HTTP-FLV";
-        case SrsListenerGb28181Sip:
-            return "GB28181-SIP over UDP";
-        case SrsListenerGb28181RtpMux:
-            return "GB28181-Stream over RTP";
         default:
             return "UNKONWN";
     }
@@ -115,62 +108,6 @@ srs_error_t SrsBufferListener::listen(string i, int p)
 srs_error_t SrsBufferListener::on_tcp_client(srs_netfd_t stfd)
 {
     srs_error_t err = server->accept_client(type, stfd);
-    if (err != srs_success) {
-        srs_warn("accept client failed, err is %s", srs_error_desc(err).c_str());
-        srs_freep(err);
-    }
-    
-    return srs_success;
-}
-
-SrsRtspListener::SrsRtspListener(SrsServer* svr, SrsListenerType t, SrsConfDirective* c) : SrsListener(svr, t)
-{
-    listener = NULL;
-    
-    // the caller already ensure the type is ok,
-    // we just assert here for unknown stream caster.
-    srs_assert(type == SrsListenerRtsp);
-    if (type == SrsListenerRtsp) {
-        caster = new SrsRtspCaster(c);
-
-        // TODO: FIXME: Must check error.
-        caster->initialize();
-    }
-}
-
-SrsRtspListener::~SrsRtspListener()
-{
-    srs_freep(caster);
-    srs_freep(listener);
-}
-
-srs_error_t SrsRtspListener::listen(string i, int p)
-{
-    srs_error_t err = srs_success;
-    
-    // the caller already ensure the type is ok,
-    // we just assert here for unknown stream caster.
-    srs_assert(type == SrsListenerRtsp);
-    
-    ip = i;
-    port = p;
-    
-    srs_freep(listener);
-    listener = new SrsTcpListener(this, ip, port);
-    
-    if ((err = listener->listen()) != srs_success) {
-        return srs_error_wrap(err, "rtsp listen %s:%d", ip.c_str(), port);
-    }
-    
-    string v = srs_listener_type2string(type);
-    srs_trace("%s listen at tcp://%s:%d, fd=%d", v.c_str(), ip.c_str(), port, listener->fd());
-    
-    return err;
-}
-
-srs_error_t SrsRtspListener::on_tcp_client(srs_netfd_t stfd)
-{
-    srs_error_t err = caster->on_tcp_client(stfd);
     if (err != srs_success) {
         srs_warn("accept client failed, err is %s", srs_error_desc(err).c_str());
         srs_freep(err);
@@ -253,9 +190,7 @@ srs_error_t SrsUdpStreamListener::listen(string i, int p)
     
     // the caller already ensure the type is ok,
     // we just assert here for unknown stream caster.
-    srs_assert(type == SrsListenerMpegTsOverUdp 
-            || type == SrsListenerGb28181Sip 
-            || type == SrsListenerGb28181RtpMux);
+    srs_assert(type == SrsListenerMpegTsOverUdp);
     
     ip = i;
     port = p;
@@ -292,85 +227,6 @@ SrsUdpCasterListener::~SrsUdpCasterListener()
 {
     srs_freep(caster);
 }
-
-#ifdef SRS_GB28181
-
-SrsGb28181Listener::SrsGb28181Listener(SrsServer* svr, SrsListenerType t, SrsConfDirective* c) : SrsUdpStreamListener(svr, t, NULL)
-{
-    // the caller already ensure the type is ok,
-    // we just assert here for unknown stream caster.
-    srs_assert(type == SrsListenerGb28181Sip 
-             ||type == SrsListenerGb28181RtpMux);
-
-    if (type == SrsListenerGb28181Sip) {
-        caster = new SrsGb28181SipService(c);
-    }else if(type == SrsListenerGb28181RtpMux){
-        caster = new SrsGb28181RtpMuxService(c);
-    }
-}
-
-SrsGb28181Listener::~SrsGb28181Listener()
-{
-    srs_freep(caster);
-}
-
-SrsGb28181TcpListener::SrsGb28181TcpListener(SrsServer* svr, SrsListenerType t, SrsConfDirective* c) : SrsListener(svr, t)
-{
-	// the caller already ensure the type is ok,
-	// we just assert here for unknown stream caster.
-	srs_assert(type == SrsListenerGb28181RtpMux);
-
-    caster = new SrsGb28181Caster(c);
-	listener = NULL;
-}
-
-SrsGb28181TcpListener::~SrsGb28181TcpListener()
-{
-	srs_freep(caster);
-	srs_freep(listener);
-}
-
-srs_error_t SrsGb28181TcpListener::listen(std::string i, int p)
-{
-	srs_error_t err = srs_success;
-
-	// the caller already ensure the type is ok,
-	// we just assert here for unknown stream caster.
-	srs_assert(type == SrsListenerGb28181RtpMux);
-
-	ip = i;
-	port = p;
-
-	if ((err = caster->initialize()) != srs_success) {
-	    return srs_error_wrap(err, "init caster");
-	}
-
-	srs_freep(listener);
-	listener = new SrsTcpListener(this, ip, port);
-
-	if ((err = listener->listen()) != srs_success) {
-		return srs_error_wrap(err, "rtsp listen %s:%d", ip.c_str(), port);
-	}
-
-	string v = srs_listener_type2string(type);
-
-	return err;
-}
-
-srs_error_t SrsGb28181TcpListener::on_tcp_client(srs_netfd_t stfd)
-{
-	int fd = srs_netfd_fileno(stfd);
-	string ip = srs_get_peer_ip(fd);
-
-	srs_error_t err = caster->on_tcp_client(stfd);
-	if (err != srs_success) {
-		srs_warn("accept client failed, err is %s", srs_error_desc(err).c_str());
-		srs_freep(err);
-	}
-	return srs_success;
-}
-
-#endif
 
 SrsSignalManager* SrsSignalManager::instance = NULL;
 
@@ -658,7 +514,8 @@ SrsServer::SrsServer()
     
     signal_manager = new SrsSignalManager(this);
     conn_manager = new SrsResourceManager("TCP", true);
-    
+    latest_version_ = new SrsLatestVersion();
+
     handler = NULL;
     ppid = ::getppid();
     
@@ -698,12 +555,8 @@ void SrsServer::destroy()
     }
     
     srs_freep(signal_manager);
+    srs_freep(latest_version_);
     srs_freep(conn_manager);
-
-#ifdef SRS_GB28181
-    //free global gb28181 manager
-    srs_freep(_srs_gb28181);
-#endif
 }
 
 void SrsServer::dispose()
@@ -717,7 +570,6 @@ void SrsServer::dispose()
     close_listeners(SrsListenerHttpStream);
     close_listeners(SrsListenerHttpsStream);
     close_listeners(SrsListenerMpegTsOverUdp);
-    close_listeners(SrsListenerRtsp);
     close_listeners(SrsListenerFlv);
     
     // Fast stop to notify FFMPEG to quit, wait for a while then fast kill.
@@ -744,7 +596,6 @@ void SrsServer::gracefully_dispose()
     close_listeners(SrsListenerHttpStream);
     close_listeners(SrsListenerHttpsStream);
     close_listeners(SrsListenerMpegTsOverUdp);
-    close_listeners(SrsListenerRtsp);
     close_listeners(SrsListenerFlv);
     srs_trace("listeners closed");
 
@@ -816,7 +667,18 @@ srs_error_t SrsServer::initialize_st()
 
 srs_error_t SrsServer::initialize_signal()
 {
-    return signal_manager->initialize();
+    srs_error_t err = srs_success;
+
+    if ((err = signal_manager->initialize()) != srs_success) {
+        return srs_error_wrap(err, "init signal manager");
+    }
+
+    // Start the version query coroutine.
+    if ((err = latest_version_->start()) != srs_success) {
+        return srs_error_wrap(err, "start version query");
+    }
+
+    return err;
 }
 
 srs_error_t SrsServer::acquire_pid_file()
@@ -980,11 +842,6 @@ srs_error_t SrsServer::http_handle()
     if ((err = http_api_mux->handle("/api/v1/clusters", new SrsGoApiClusters())) != srs_success) {
         return srs_error_wrap(err, "handle clusters");
     }
-#ifdef SRS_GB28181
-    if ((err = http_api_mux->handle("/api/v1/gb28181", new SrsGoApiGb28181())) != srs_success) {
-        return srs_error_wrap(err, "handle raw");
-    }
-#endif
     
     // test the request info.
     if ((err = http_api_mux->handle("/api/v1/tests/requests", new SrsGoApiRequests())) != srs_success) {
@@ -1411,32 +1268,6 @@ srs_error_t SrsServer::listen_https_stream()
     return err;
 }
 
-#ifdef SRS_GB28181
-srs_error_t SrsServer::listen_gb28181_sip(SrsConfDirective* stream_caster)
-{ 
-    srs_error_t err = srs_success;
-
-    SrsListener* sip_listener = NULL;
-    sip_listener = new SrsGb28181Listener(this, SrsListenerGb28181Sip, stream_caster);
-               
-    int port =  _srs_config->get_stream_caster_gb28181_sip_listen(stream_caster);
-    if (port <= 0) {
-        return srs_error_new(ERROR_STREAM_CASTER_PORT, "invalid sip port=%d", port);
-    }
-    
-    srs_assert(sip_listener != NULL);
-    
-    listeners.push_back(sip_listener);
-
-    // TODO: support listen at <[ip:]port>
-    if ((err = sip_listener->listen(srs_any_address_for_listener(), port)) != srs_success) {
-        return srs_error_wrap(err, "listen at %d", port);
-    }
-
-    return err;
-}
-#endif
-
 srs_error_t SrsServer::listen_stream_caster()
 {
     srs_error_t err = srs_success;
@@ -1457,38 +1288,8 @@ srs_error_t SrsServer::listen_stream_caster()
         std::string caster = _srs_config->get_stream_caster_engine(stream_caster);
         if (srs_stream_caster_is_udp(caster)) {
             listener = new SrsUdpCasterListener(this, SrsListenerMpegTsOverUdp, stream_caster);
-        } else if (srs_stream_caster_is_rtsp(caster)) {
-            srs_warn("It's deprecated and will be removed in the future, see https://github.com/ossrs/srs/issues/2304#issuecomment-826009290");
-            listener = new SrsRtspListener(this, SrsListenerRtsp, stream_caster);
         } else if (srs_stream_caster_is_flv(caster)) {
             listener = new SrsHttpFlvListener(this, SrsListenerFlv, stream_caster);
-#ifdef SRS_GB28181
-        } else if (srs_stream_caster_is_gb28181(caster)) {
-            //init global gb28181 manger
-            if (_srs_gb28181 == NULL){
-                _srs_gb28181 = new SrsGb28181Manger(this, stream_caster);
-                if ((err = _srs_gb28181->initialize()) != srs_success){
-                    return err;
-                }
-            }
-
-            //sip listener
-            if (_srs_config->get_stream_caster_gb28181_sip_enable(stream_caster)){
-                if ((err = listen_gb28181_sip(stream_caster)) != srs_success){
-                    return err;
-                }
-            }
-
-            //gb28181 stream listener
-            if (!_srs_config->get_stream_caster_tcp_enable(stream_caster)) {
-                listener = new SrsGb28181Listener(this, SrsListenerGb28181RtpMux, stream_caster);
-            } else {
-                listener = new SrsGb28181TcpListener(this, SrsListenerGb28181RtpMux, stream_caster);
-            }
-#else
-            srs_warn("gb28181 is disabled, please enable it by: ./configure --with-gb28181");
-            continue;
-#endif
         } else {
             return srs_error_new(ERROR_STREAM_CASTER_ENGINE, "invalid caster %s", caster.c_str());
         }

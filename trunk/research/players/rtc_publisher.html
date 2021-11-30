@@ -31,7 +31,7 @@
                     <!--<li><a id="nav_srs_chat" href="srs_chat.html">SRS会议</a></li>-->
                     <!--<li><a id="nav_srs_bwt" href="srs_bwt.html">SRS测网速</a></li>-->
                     <!--<li><a id="nav_vlc" href="vlc.html">VLC播放器</a></li>-->
-                    <li><a id="nav_gb28181" href="srs_gb28181.html">GB28181</a></li>
+                    <!--<li><a id="nav_gb28181" href="srs_gb28181.html">GB28181</a></li>-->
                     <li>
                         <a href="https://github.com/ossrs/srs">
                             <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/ossrs/srs?style=social">
@@ -110,12 +110,12 @@ $(function(){
     srs_init_rtc("#txt_url", query);
 
     $("#btn_publish").click(startPublish);
+    // Never play util windows loaded @see https://github.com/ossrs/srs/issues/2732
     if (query.autostart === 'true') {
-        startPublish();
+        window.addEventListener("load", function(){ startPublish(); });
     }
 });
 </script>
 </body>
 </html>
 
-</html>

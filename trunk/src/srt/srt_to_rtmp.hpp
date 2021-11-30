@@ -24,6 +24,7 @@
 
 #include "srt_data.hpp"
 #include "ts_demux.hpp"
+#include "srt_log.hpp"
 
 #define SRT_VIDEO_MSG_TYPE 0x01
 #define SRT_AUDIO_MSG_TYPE 0x02
@@ -89,7 +90,7 @@ private:
 
     int get_sample_rate(char sound_rate);
 
-    void rtmp_write_work();
+    srs_error_t rtmp_write_work();
 
 private:
     virtual srs_error_t rtmp_write_packet(char type, uint32_t timestamp, char* data, int size);
@@ -134,12 +135,14 @@ public:
 
     void insert_data_message(unsigned char* data_p, unsigned int len, const std::string& key_path);
     void insert_ctrl_message(unsigned int msg_type, const std::string& key_path);
+    void insert_log_message(LOGGER_LEVEL level, const std::string& log_content);
 
 private:
     SRT_DATA_MSG_PTR get_data_message();
     virtual srs_error_t cycle();
     void handle_ts_data(SRT_DATA_MSG_PTR data_ptr);
     void handle_close_rtmpsession(const std::string& key_path);
+    void handle_log_data(SRT_DATA_MSG_PTR data_ptr);
     void check_rtmp_alive();
 
 private:

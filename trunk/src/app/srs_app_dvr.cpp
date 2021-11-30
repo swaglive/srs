@@ -566,6 +566,8 @@ string SrsDvrAsyncCallOnDvr::to_string()
     return ss.str();
 }
 
+extern SrsAsyncCallWorker* _srs_dvr_async;
+
 SrsDvrPlan::SrsDvrPlan()
 {
     req = NULL;
@@ -573,13 +575,12 @@ SrsDvrPlan::SrsDvrPlan()
     
     dvr_enabled = false;
     segment = NULL;
-    async = new SrsAsyncCallWorker();
 }
 
 SrsDvrPlan::~SrsDvrPlan()
 {
     srs_freep(segment);
-    srs_freep(async);
+    srs_freep(req);
 }
 
 srs_error_t SrsDvrPlan::initialize(SrsOriginHub* h, SrsDvrSegmenter* s, SrsRequest* r)
@@ -587,7 +588,7 @@ srs_error_t SrsDvrPlan::initialize(SrsOriginHub* h, SrsDvrSegmenter* s, SrsReque
     srs_error_t err = srs_success;
     
     hub = h;
-    req = r;
+    req = r->copy();
     segment = s;
     
     if ((err = segment->initialize(this, r)) != srs_success) {
@@ -597,20 +598,17 @@ srs_error_t SrsDvrPlan::initialize(SrsOriginHub* h, SrsDvrSegmenter* s, SrsReque
     return err;
 }
 
-srs_error_t SrsDvrPlan::on_publish()
+srs_error_t SrsDvrPlan::on_publish(SrsRequest* r)
 {
-    srs_error_t err = srs_success;
+    // @see https://github.com/ossrs/srs/issues/1613#issuecomment-960623359
+    srs_freep(req);
+    req = r->copy();
 
-    if ((err = async->start()) != srs_success) {
-        return srs_error_wrap(err, "async");
-    }
-
-    return err;
+    return srs_success;
 }
 
 void SrsDvrPlan::on_unpublish()
 {
-    async->stop();
 }
 
 srs_error_t SrsDvrPlan::on_meta_data(SrsSharedPtrMessage* shared_metadata)
@@ -663,7 +661,7 @@ srs_error_t SrsDvrPlan::on_reap_segment()
     SrsFragment* fragment = segment->current();
     string fullpath = fragment->fullpath();
     
-    if ((err = async->execute(new SrsDvrAsyncCallOnDvr(cid, req, fullpath))) != srs_success) {
+    if ((err = _srs_dvr_async->execute(new SrsDvrAsyncCallOnDvr(cid, req, fullpath))) != srs_success) {
         return srs_error_wrap(err, "reap segment");
     }
     
@@ -693,11 +691,11 @@ SrsDvrSessionPlan::~SrsDvrSessionPlan()
 {
 }
 
-srs_error_t SrsDvrSessionPlan::on_publish()
+srs_error_t SrsDvrSessionPlan::on_publish(SrsRequest* r)
 {
     srs_error_t err = srs_success;
 
-    if ((err = SrsDvrPlan::on_publish()) != srs_success) {
+    if ((err = SrsDvrPlan::on_publish(r)) != srs_success) {
         return err;
     }
     
@@ -768,11 +766,11 @@ srs_error_t SrsDvrSegmentPlan::initialize(SrsOriginHub* h, SrsDvrSegmenter* s, S
     return srs_success;
 }
 
-srs_error_t SrsDvrSegmentPlan::on_publish()
+srs_error_t SrsDvrSegmentPlan::on_publish(SrsRequest* r)
 {
     srs_error_t err = srs_success;
 
-    if ((err = SrsDvrPlan::on_publish()) != srs_success) {
+    if ((err = SrsDvrPlan::on_publish(r)) != srs_success) {
         return err;
     }
     
@@ -919,13 +917,14 @@ SrsDvr::~SrsDvr()
     _srs_config->unsubscribe(this);
     
     srs_freep(plan);
+    srs_freep(req);
 }
 
 srs_error_t SrsDvr::initialize(SrsOriginHub* h, SrsRequest* r)
 {
     srs_error_t err = srs_success;
     
-    req = r;
+    req = r->copy();
     hub = h;
     
     SrsConfDirective* conf = _srs_config->get_dvr_apply(r->vhost);
@@ -951,7 +950,7 @@ srs_error_t SrsDvr::initialize(SrsOriginHub* h, SrsRequest* r)
     return err;
 }
 
-srs_error_t SrsDvr::on_publish()
+srs_error_t SrsDvr::on_publish(SrsRequest* r)
 {
     srs_error_t err = srs_success;
     
@@ -960,9 +959,12 @@ srs_error_t SrsDvr::on_publish()
         return err;
     }
     
-    if ((err = plan->on_publish()) != srs_success) {
+    if ((err = plan->on_publish(r)) != srs_success) {
         return srs_error_wrap(err, "publish");
     }
+
+    srs_freep(req);
+    req = r->copy();
     
     return err;
 }
@@ -1007,33 +1009,4 @@ srs_error_t SrsDvr::on_video(SrsSharedPtrMessage* shared_video, SrsFormat* forma
     
     return plan->on_video(shared_video, format);
 }
-
-srs_error_t SrsDvr::on_reload_vhost_dvr_apply(string vhost)
-{
-    srs_error_t err = srs_success;
-    
-    SrsConfDirective* conf = _srs_config->get_dvr_apply(req->vhost);
-    bool v = srs_config_apply_filter(conf, req);
-    
-    // the apply changed, republish the dvr.
-    if (v == actived) {
-        return err;
-    }
-    actived = v;
-    
-    on_unpublish();
-    if (!actived) {
-        return err;
-    }
-    
-    if ((err = on_publish()) != srs_success) {
-        return srs_error_wrap(err, "on publish");
-    }
-    if ((err = hub->on_dvr_request_sh()) != srs_success) {
-        return srs_error_wrap(err, "request sh");
-    }
-    
-    return err;
-}
-
 

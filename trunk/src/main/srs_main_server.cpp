@@ -49,6 +49,7 @@ using namespace std;
 
 // pre-declare
 srs_error_t run_directly_or_daemon();
+srs_error_t srs_detect_docker();
 srs_error_t run_hybrid_server();
 void show_macro_features();
 
@@ -81,9 +82,6 @@ srs_error_t do_main(int argc, char** argv)
 
     // TODO: support both little and big endian.
     srs_assert(srs_is_little_endian());
-
-    // For RTC to generating random ICE username.
-    ::srandom((unsigned long)(srs_update_system_time() | (::getpid()<<13)));
     
     // for gperf gmp or gcp,
     // should never enable it when not enabled for performance issue.
@@ -94,18 +92,15 @@ srs_error_t do_main(int argc, char** argv)
     ProfilerStart("gperf.srs.gcp");
 #endif
     
-    // directly compile error when these two macro defines.
-#if defined(SRS_GPERF_MC) && defined(SRS_GPERF_MP)
-#error ("option --with-gmc confict with --with-gmp, "
-    "@see: http://google-perftools.googlecode.com/svn/trunk/doc/heap_checker.html\n"
-    "Note that since the heap-checker uses the heap-profiling framework internally, "
-    "it is not possible to run both the heap-checker and heap profiler at the same time");
-#endif
-    
     // never use gmp to check memory leak.
 #ifdef SRS_GPERF_MP
 #warning "gmp is not used for memory leak, please use gmc instead."
 #endif
+
+    // Ignore any error while detecting docker.
+    if ((err = srs_detect_docker()) != srs_success) {
+        srs_error_reset(err);
+    }
     
     // never use srs log(srs_trace, srs_error, etc) before config parse the option,
     // which will load the log config and apply it.
@@ -389,11 +384,6 @@ srs_error_t srs_detect_docker()
 srs_error_t run_directly_or_daemon()
 {
     srs_error_t err = srs_success;
-
-    // Ignore any error while detecting docker.
-    if ((err = srs_detect_docker()) != srs_success) {
-        srs_error_reset(err);
-    }
 
     // Load daemon from config, disable it for docker.
     // @see https://github.com/ossrs/srs/issues/1594

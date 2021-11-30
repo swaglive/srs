@@ -5,8 +5,7 @@ help=no
 # feature options
 SRS_HDS=NO
 SRS_SRT=NO
-SRS_RTC=RESERVED
-SRS_GB28181=NO
+SRS_RTC=YES
 SRS_CXX11=NO
 SRS_CXX14=NO
 SRS_NGINX=NO
@@ -78,6 +77,14 @@ SRS_GPROF=NO # Performance test: gprof
 SRS_X86_X64=NO # For x86_64 servers
 SRS_OSX=NO #For osx/macOS PC.
 SRS_CROSS_BUILD=NO #For cross build, for example, on Ubuntu.
+# For cross build, the cpu, for example(FFmpeg), --cpu=24kc
+SRS_CROSS_BUILD_CPU=
+# For cross build, the arch, for example(FFmpeg), --arch=aarch64
+SRS_CROSS_BUILD_ARCH=
+# For cross build, the host, for example(libsrtp), --host=aarch64-linux-gnu
+SRS_CROSS_BUILD_HOST=
+# For cross build, the cross prefix, for example(FFmpeg), --cross-prefix=aarch64-linux-gnu-
+SRS_CROSS_BUILD_PREFIX=
 #
 #####################################################################################
 # Toolchain for cross-build on Ubuntu for ARM or MIPS.
@@ -103,7 +110,7 @@ function show_help() {
 
 Presets:
   --x86-64, --x86-x64       For x86/x64 cpu, common pc and servers. Default: $(value2switch $SRS_X86_X64)
-  --cross-build             Enable cross-build for ARM, please set bellow Toolchain also. Default: $(value2switch $SRS_CROSS_BUILD)
+  --cross-build             Enable cross-build, please set bellow Toolchain also. Default: $(value2switch $SRS_CROSS_BUILD)
   --osx                     Enable build for OSX/Darwin AppleOS. Default: $(value2switch $SRS_OSX)
 
 Features:
@@ -115,7 +122,6 @@ Features:
   --utest=on|off            Whether build the utest. Default: $(value2switch $SRS_UTEST)
   --srt=on|off              Whether build the SRT. Default: $(value2switch $SRS_SRT)
   --rtc=on|off              Whether build the WebRTC. Default: $(value2switch $SRS_RTC)
-  --gb28181=on|off          Whether build the GB28181. Default: $(value2switch $SRS_GB28181)
   --cxx11=on|off            Whether enable the C++11. Default: $(value2switch $SRS_CXX11)
   --cxx14=on|off            Whether enable the C++14. Default: $(value2switch $SRS_CXX14)
   --ffmpeg-fit=on|off       Whether enable the FFmpeg fit(source code). Default: $(value2switch $SRS_FFMPEG_FIT)
@@ -143,6 +149,10 @@ Performance:                @see https://blog.csdn.net/win_lin/article/details/5
 
 Toolchain options:          @see https://github.com/ossrs/srs/wiki/v4_CN_SrsLinuxArm#ubuntu-cross-build-srs
   --static=on|off           Whether add '-static' to link options. Default: $(value2switch $SRS_STATIC)
+  --cpu=<CPU>               Toolchain: Select the minimum required CPU for cross-build.
+  --arch=<ARCH>             Toolchain: Select architecture for cross-build.
+  --host=<BUILD>            Toolchain: Cross-compile to build programs to run on HOST.
+  --cross-prefix=<PREFIX>   Toolchain: Use PREFIX for compilation tools.
   --cc=<CC>                 Toolchain: Use c compiler CC. Default: $SRS_TOOL_CC
   --cxx=<CXX>               Toolchain: Use c++ compiler CXX. Default: $SRS_TOOL_CXX
   --ar=<AR>                 Toolchain: Use archive tool AR. Default: $SRS_TOOL_CXX
@@ -198,6 +208,11 @@ function parse_user_option() {
         echo "Error: The $option is not supported yet"; exit 1
     fi
 
+    if [[ $option == '--arm' || $option == '--mips' || $option == '--with-arm-ubuntu12' || $option == '--with-mips-ubuntu12' ]]; then
+        echo "Error: Removed misleading option $option, please read https://github.com/ossrs/srs/wiki/v4_CN_SrsLinuxArm#ubuntu-cross-build-srs"
+        exit -1
+    fi
+
     # Parse options to variables.
     case "$option" in
         -h)                             help=yes                    ;;
@@ -207,6 +222,10 @@ function parse_user_option() {
         --prefix)                       SRS_PREFIX=${value}         ;;
 
         --static)                       SRS_STATIC=$(switch2value $value) ;;
+        --cpu)                          SRS_CROSS_BUILD_CPU=${value} ;;
+        --arch)                         SRS_CROSS_BUILD_ARCH=${value} ;;
+        --host)                         SRS_CROSS_BUILD_HOST=${value} ;;
+        --cross-prefix)                 SRS_CROSS_BUILD_PREFIX=${value} ;;
         --cc)                           SRS_TOOL_CC=${value}        ;;
         --cxx)                          SRS_TOOL_CXX=${value}       ;;
         --ar)                           SRS_TOOL_AR=${value}        ;;
@@ -265,10 +284,6 @@ function parse_user_option() {
         --simulator)                    SRS_SIMULATOR=$(switch2value $value) ;;
         --ffmpeg-fit)                   SRS_FFMPEG_FIT=$(switch2value $value) ;;
 
-        --with-gb28181)                 SRS_GB28181=YES             ;;
-        --without-gb28181)              SRS_GB28181=NO              ;;
-        --gb28181)                      SRS_GB28181=$(switch2value $value) ;;
-
         --cxx11)                        SRS_CXX11=$(switch2value $value) ;;
         --cxx14)                        SRS_CXX14=$(switch2value $value) ;;
 
@@ -321,14 +336,7 @@ function parse_user_option() {
 
         # Alias for --arm, cross build.
         --cross-build)                  SRS_CROSS_BUILD=YES         ;;
-        --arm)                          SRS_CROSS_BUILD=YES         ;;
-        --mips)                         SRS_CROSS_BUILD=YES         ;;
-        --with-arm-ubuntu12)            SRS_CROSS_BUILD=YES         ;;
-        --without-arm-ubuntu12)         SRS_CROSS_BUILD=NO          ;;
-        --arm-ubuntu12)                 SRS_CROSS_BUILD=$(switch2value $value) ;;
-        --with-mips-ubuntu12)           SRS_CROSS_BUILD=YES         ;;
-        --without-mips-ubuntu12)        SRS_CROSS_BUILD=NO          ;;
-        --mips-ubuntu12)                SRS_CROSS_BUILD=$(switch2value $value) ;;
+        --enable-cross-compile)         SRS_CROSS_BUILD=YES         ;;
 
         # Deprecated, might be removed in future.
         --with-nginx)                   SRS_NGINX=YES               ;;
@@ -356,6 +364,7 @@ function parse_user_option_to_value_and_option() {
     esac
 }
 
+# For variable values, might be three values: YES, RESERVED, NO(by default).
 function value2switch() {
     if [[ $1 == YES ]]; then
       echo on;
@@ -364,6 +373,7 @@ function value2switch() {
     fi
 }
 
+# For user options, only off or on(by default).
 function switch2value() {
     if [[ $1 == off ]]; then
       echo NO;
@@ -384,20 +394,36 @@ do
     parse_user_option
 done
 
-if [ $help = yes ]; then
-    show_help
-    exit 0
-fi
-
-function apply_detail_options() {
+function apply_auto_options() {
     # set default preset if not specifies
     if [[ $SRS_X86_X64 == NO && $SRS_OSX == NO && $SRS_CROSS_BUILD == NO ]]; then
         SRS_X86_X64=YES; opt="--x86-x64 $opt";
     fi
 
-    # Setup the default values if not set.
-    if [[ $SRS_RTC == RESERVED ]]; then
-        SRS_RTC=YES; if [[ $SRS_CROSS_BUILD == YES ]]; then SRS_RTC=NO; fi
+    if [[ $SRS_CROSS_BUILD == YES ]]; then
+        if [[ $SRS_CROSS_BUILD_PREFIX != "" && $SRS_CROSS_BUILD_HOST == "" ]]; then
+            SRS_CROSS_BUILD_HOST=$(echo $SRS_CROSS_BUILD_PREFIX| sed 's/-$//g')
+        fi
+        if [[ $SRS_TOOL_CC != "" && $SRS_CROSS_BUILD_HOST == "" ]]; then
+            SRS_CROSS_BUILD_HOST=$(echo $SRS_TOOL_CC| sed 's/-gcc$//g')
+        fi
+        if [[ $SRS_CROSS_BUILD_PREFIX == "" ]]; then
+            SRS_CROSS_BUILD_PREFIX="${SRS_CROSS_BUILD_HOST}-"
+        fi
+        SRS_TOOL_CC=${SRS_CROSS_BUILD_PREFIX}gcc
+        SRS_TOOL_CXX=${SRS_CROSS_BUILD_PREFIX}g++
+        SRS_TOOL_AR=${SRS_CROSS_BUILD_PREFIX}ar
+        SRS_TOOL_LD=${SRS_CROSS_BUILD_PREFIX}ld
+        SRS_TOOL_RANDLIB=${SRS_CROSS_BUILD_PREFIX}randlib
+        if [[ $SRS_CROSS_BUILD_ARCH == "" ]]; then
+            echo $SRS_TOOL_CC| grep arm >/dev/null 2>&1 && SRS_CROSS_BUILD_ARCH="arm"
+            echo $SRS_TOOL_CC| grep aarch64 >/dev/null 2>&1 && SRS_CROSS_BUILD_ARCH="aarch64"
+        fi
+        echo "For cross build, host: $SRS_CROSS_BUILD_HOST, prefix: $SRS_CROSS_BUILD_PREFIX, arch: $SRS_CROSS_BUILD_ARCH, cpu: $SRS_CROSS_BUILD_CPU gcc: $SRS_TOOL_CC"
+    fi
+
+    if [[ $SRS_OSX == YES ]]; then
+      SRS_TOOL_LD=$SRS_TOOL_CC
     fi
 
     # The SRT code in SRS requires c++11, although we build libsrt without c++11.
@@ -416,6 +442,28 @@ function apply_detail_options() {
     if [ $SRS_TRANSCODE = YES ]; then SRS_FFMPEG_STUB=YES; fi
     if [ $SRS_INGEST = YES ]; then SRS_FFMPEG_STUB=YES; fi
 
+    if [[ $SRS_SRTP_ASM == YES && $SRS_RTC == NO ]]; then
+        echo "Disable SRTP-ASM, because RTC is disabled."
+        SRS_SRTP_ASM=NO
+    fi
+
+    if [[ $SRS_SRTP_ASM == YES && $SRS_NASM == NO ]]; then
+        echo "Disable SRTP-ASM, because NASM is disabled."
+        SRS_SRTP_ASM=NO
+    fi
+}
+
+if [ $help = yes ]; then
+    apply_auto_options
+    show_help
+    exit 0
+fi
+
+#####################################################################################
+# apply options
+#####################################################################################
+
+function apply_detail_options() {
     # Always enable HTTP utilies.
     if [ $SRS_HTTP_CORE = NO ]; then SRS_HTTP_CORE=YES; echo -e "${YELLOW}[WARN] Always enable HTTP utilies.${BLACK}"; fi
     if [ $SRS_STREAM_CASTER = NO ]; then SRS_STREAM_CASTER=YES; echo -e "${YELLOW}[WARN] Always enable StreamCaster.${BLACK}"; fi
@@ -435,17 +483,8 @@ function apply_detail_options() {
     else
         export SRS_JOBS="--jobs=${SRS_JOBS}"
     fi
-
-    if [[ $SRS_SRTP_ASM == YES && $SRS_RTC == NO ]]; then
-        echo "Disable SRTP-ASM, because RTC is disabled."
-        SRS_SRTP_ASM=NO
-    fi
-
-    if [[ $SRS_SRTP_ASM == YES && $SRS_NASM == NO ]]; then
-        echo "Disable SRTP-ASM, because NASM is disabled."
-        SRS_SRTP_ASM=NO
-    fi
 }
+apply_auto_options
 apply_detail_options
 
 function regenerate_options() {
@@ -473,7 +512,6 @@ function regenerate_options() {
     SRS_AUTO_CONFIGURE="${SRS_AUTO_CONFIGURE} --srt=$(value2switch $SRS_SRT)"
     SRS_AUTO_CONFIGURE="${SRS_AUTO_CONFIGURE} --rtc=$(value2switch $SRS_RTC)"
     SRS_AUTO_CONFIGURE="${SRS_AUTO_CONFIGURE} --simulator=$(value2switch $SRS_SIMULATOR)"
-    SRS_AUTO_CONFIGURE="${SRS_AUTO_CONFIGURE} --gb28181=$(value2switch $SRS_GB28181)"
     SRS_AUTO_CONFIGURE="${SRS_AUTO_CONFIGURE} --cxx11=$(value2switch $SRS_CXX11)"
     SRS_AUTO_CONFIGURE="${SRS_AUTO_CONFIGURE} --cxx14=$(value2switch $SRS_CXX14)"
     SRS_AUTO_CONFIGURE="${SRS_AUTO_CONFIGURE} --ffmpeg-fit=$(value2switch $SRS_FFMPEG_FIT)"
@@ -497,6 +535,10 @@ function regenerate_options() {
     SRS_AUTO_CONFIGURE="${SRS_AUTO_CONFIGURE} --debug=$(value2switch $SRS_DEBUG)"
     SRS_AUTO_CONFIGURE="${SRS_AUTO_CONFIGURE} --debug-stats=$(value2switch $SRS_DEBUG_STATS)"
     SRS_AUTO_CONFIGURE="${SRS_AUTO_CONFIGURE} --cross-build=$(value2switch $SRS_CROSS_BUILD)"
+    if [[ $SRS_CROSS_BUILD_ARCH != "" ]]; then SRS_AUTO_CONFIGURE="$SRS_AUTO_CONFIGURE --arch=$SRS_CROSS_BUILD_ARCH"; fi
+    if [[ $SRS_CROSS_BUILD_CPU != "" ]]; then SRS_AUTO_CONFIGURE="$SRS_AUTO_CONFIGURE --cpu=$SRS_CROSS_BUILD_CPU"; fi
+    if [[ $SRS_CROSS_BUILD_HOST != "" ]]; then SRS_AUTO_CONFIGURE="$SRS_AUTO_CONFIGURE --host=$SRS_CROSS_BUILD_HOST"; fi
+    if [[ $SRS_CROSS_BUILD_PREFIX != "" ]]; then SRS_AUTO_CONFIGURE="$SRS_AUTO_CONFIGURE --cross-prefix=$SRS_CROSS_BUILD_PREFIX"; fi
     if [[ $SRS_EXTRA_FLAGS != '' ]]; then   SRS_AUTO_CONFIGURE="${SRS_AUTO_CONFIGURE} --extra-flags=\\\"$SRS_EXTRA_FLAGS\\\""; fi
     if [[ $SRS_BUILD_TAG != '' ]]; then     SRS_AUTO_CONFIGURE="${SRS_AUTO_CONFIGURE} --build-tag=\\\"$SRS_BUILD_TAG\\\""; fi
     if [[ $SRS_TOOL_CC != '' ]]; then       SRS_AUTO_CONFIGURE="${SRS_AUTO_CONFIGURE} --cc=$SRS_TOOL_CC"; fi

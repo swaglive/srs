@@ -36,7 +36,9 @@ public:
     srs_error_t parse_attribute(const std::string& attribute, const std::string& value);
     srs_error_t encode(std::ostringstream& os);
 
-    bool operator=(const SrsSessionInfo& rhs);
+    bool operator==(const SrsSessionInfo& rhs);
+    // user-defined copy assignment (copy-and-swap idiom)
+    SrsSessionInfo& operator=(SrsSessionInfo other);
 public:
     std::string ice_ufrag_;
     std::string ice_pwd_;
@@ -57,6 +59,9 @@ public:
 public:
     uint32_t ssrc_;
     std::string cname_;
+    // See https://webrtchacks.com/sdp-anatomy/
+    // a=ssrc:2231627014 msid:lgsCFqt9kN2fVKw5wg3NKqGdATQoltEwOdMS daed9400-d0dd-4db3-b949-422499e96e2d
+    // a=ssrc:2231627014 msid:{msid_} {msid_tracker_}
     std::string msid_;
     std::string msid_tracker_;
     std::string mslabel_;
