@@ -5,22 +5,23 @@
 [![](https://github.com/ossrs/srs/actions/workflows/release.yml/badge.svg)](https://github.com/ossrs/srs/actions/workflows/release.yml?query=workflow%3ARelease)
 [![](https://github.com/ossrs/srs/actions/workflows/test.yml/badge.svg?branch=4.0release)](https://github.com/ossrs/srs/actions?query=workflow%3ATest+branch%3A4.0release)
 [![](https://codecov.io/gh/ossrs/srs/branch/4.0release/graph/badge.svg)](https://codecov.io/gh/ossrs/srs/branch/4.0release)
-[![](https://gitee.com/winlinvip/srs-wiki/raw/master/images/wechat-badge4.svg)](../../wikis/Contact#wechat)
-[![](https://gitee.com/winlinvip/srs-wiki/raw/master/images/srs-faq.svg)](https://github.com/ossrs/srs/issues/2716)
-[![](https://gitee.com/winlinvip/srs-wiki/raw/master/images/mulan-incubating.svg)](http://mulanos.cn)
-[![](https://gitee.com/winlinvip/srs-wiki/raw/master/images/srs-alternativeto.svg)](https://alternativeto.net/software/srs/about/)
-[![](https://gitee.com/winlinvip/srs-wiki/raw/master/images/srs-facebook.svg)](https://www.facebook.com/winlinvip)
-[![](https://badgen.net/twitter/follow/winlinvip)](https://twitter.com/winlinvip)
+[![](https://ossrs.net/wiki/images/wechat-badge4.svg)](../../wikis/Contact#wechat)
+[![](https://ossrs.net/wiki/images/srs-faq.svg)](https://github.com/ossrs/srs/issues/2716)
+[![](https://ossrs.net/wiki/images/mulan-incubating.svg)](http://mulanos.cn)
+[![](https://ossrs.net/wiki/images/srs-alternativeto.svg)](https://alternativeto.net/software/srs/about/)
 [![](https://img.shields.io/youtube/channel/views/UCP6ZblCL_fIJoEyUzZxC1ng?style=social)](https://www.youtube.com/channel/UCP6ZblCL_fIJoEyUzZxC1ng)
-[![](https://img.shields.io/twitch/status/winlinvip?style=social)](https://www.twitch.tv/winlinvip)
+[![](https://badgen.net/discord/members/yZ4BnPmHAd)](https://discord.gg/yZ4BnPmHAd)
+[![](https://opencollective.com/srs-server/tiers/badge.svg)](https://opencollective.com/srs-server/contribute)
+[![](https://badgen.net/badge/srs/stackoverflow/orange?icon=terminal)](https://stackoverflow.com/questions/tagged/simple-realtime-server)
+[![](https://img.shields.io/docker/pulls/ossrs/srs)](https://hub.docker.com/r/ossrs/srs/tags)
 
-SRS/4.0，[Leo][release4]，是一个简单高效的实时视频服务器，支持RTMP/WebRTC/HLS/HTTP-FLV/SRT。
+SRS/4.0，[Leo](https://github.com/ossrs/srs/wiki/Product#release40)，是一个简单高效的实时视频服务器，支持RTMP/WebRTC/HLS/HTTP-FLV/SRT。
 
 SRS is a simple, high efficiency and realtime video server, supports RTMP/WebRTC/HLS/HTTP-FLV/SRT.
 
-[![SRS Overview](https://gitee.com/winlinvip/srs-wiki/raw/master/images/SRS-Overview-4.0.png)](https://gitee.com/winlinvip/srs-wiki/raw/master/images/SRS-Overview-4.0.png)
+[![SRS Overview](https://ossrs.net/wiki/images/SRS-SingleNode-4.0-sd.png?v=114)](https://ossrs.net/wiki/images/SRS-SingleNode-4.0-hd.png)
 
-> Note: Please see https://www.processon.com/view/link/619f29791efad425fd699fd2
+> Note:  The single node architecture for SRS, for detail please see [here](https://www.figma.com/file/333POxVznQ8Wz1Rxlppn36/SRS-4.0-Server-Arch).
 
 SRS is licenced under [MIT][LICENSE], but some depended libraries are distributed using their [own licenses][LicenseMixing].
 
@@ -28,7 +29,7 @@ SRS is licenced under [MIT][LICENSE], but some depended libraries are distribute
 <a name="usage-docker"></a>
 ## Usage
 
-Build SRS from source or **docker([CN](https://github.com/ossrs/srs/wiki/v4_CN_Home#docker) / [EN](https://github.com/ossrs/srs/wiki/v4_EN_Home#docker))**, please read **Wiki: Gettting Started([CN](https://github.com/ossrs/srs/wiki/v4_CN_Home#getting-started) / [EN](https://github.com/ossrs/srs/wiki/v4_EN_Home#getting-started))**:
+Build SRS from source:
 
 ```
 git clone -b 4.0release https://gitee.com/ossrs/srs.git &&
@@ -42,14 +43,31 @@ by [FFmpeg](https://ffmpeg.org/download.html) or [OBS](https://obsproject.com/do
 ffmpeg -re -i ./doc/source.flv -c copy -f flv -y rtmp://localhost/live/livestream
 ```
 
-> Note: It's also able to [publish by H5](http://localhost:8080/players/rtc_publisher.html?autostart=true) if WebRTC is enabled.
-
 Play the following streams by [players](https://ossrs.net):
 
 * RTMP (by [VLC](https://www.videolan.org/)): rtmp://localhost/live/livestream
 * H5(HTTP-FLV): [http://localhost:8080/live/livestream.flv](http://localhost:8080/players/srs_player.html?autostart=true&stream=livestream.flv&port=8080&schema=http)
 * H5(HLS): [http://localhost:8080/live/livestream.m3u8](http://localhost:8080/players/srs_player.html?autostart=true&stream=livestream.m3u8&port=8080&schema=http)
+
+Note that if convert RTMP to WebRTC, please use [`rtmp2rtc.conf`](https://github.com/ossrs/srs/issues/2728#issuecomment-964686152):
+
 * H5(WebRTC): [webrtc://localhost/live/livestream](http://localhost:8080/players/rtc_player.html?autostart=true)
+
+> Note: Besides of FFmpeg or OBS, it's also able to [publish by H5](http://localhost:8080/players/rtc_publisher.html?autostart=true) 
+> if [WebRTC](https://github.com/ossrs/srs/issues/307) is enabled.
+
+> Highly recommend that directly run SRS by
+> **docker([CN](https://github.com/ossrs/srs/wiki/v4_CN_Home#docker) / [EN](https://github.com/ossrs/srs/wiki/v4_EN_Home#docker))**,
+> **Cloud Virtual Machine([CN](https://github.com/ossrs/srs/wiki/v4_CN_Home#cloud-virtual-machine) / [EN](https://github.com/ossrs/srs/wiki/v4_EN_Home#cloud-virtual-machine))**,
+> or **K8s([CN](https://github.com/ossrs/srs/wiki/v4_CN_Home#k8s) / [EN](https://github.com/ossrs/srs/wiki/v4_EN_Home#k8s))**,
+> however it's also easy to build SRS from source code, for detail please see
+> **Getting Started([CN](https://github.com/ossrs/srs/wiki/v4_CN_Home#getting-started) / [EN](https://github.com/ossrs/srs/wiki/v4_EN_Home#getting-started))**.
+
+> Note: If need HTTPS, by which WebRTC and modern browsers require, please read
+> **HTTPS API([CN](https://github.com/ossrs/srs/wiki/v4_CN_HTTPApi#https-api) / [EN](https://github.com/ossrs/srs/wiki/v4_EN_HTTPApi#https-api))**
+> and **HTTPS Callback([CN](https://github.com/ossrs/srs/wiki/v4_CN_HTTPCallback#https-callback) / [EN](https://github.com/ossrs/srs/wiki/v4_EN_HTTPCallback#https-callback))**
+> and **HTTPS Live Streaming([CN](https://github.com/ossrs/srs/wiki/v4_EN_DeliveryHttpStream#https-flv-live-stream) / [EN](https://github.com/ossrs/srs/wiki/v4_EN_DeliveryHttpStream#https-flv-live-stream))**,
+> however HTTPS proxy also works perfect with SRS such as Nginx.
 
 <a name="srs-40-wiki"></a>
 <a name="wiki"></a>
@@ -82,7 +100,13 @@ Other important wiki:
 
 ## AUTHORS
 
-There are two types of people that have contributed to the SRS project:
+Thank you to all our contributors! 🙏
+
+[![](https://opencollective.com/srs-server/contributors.svg?width=800&button=false)](https://opencollective.com/srs-server/contribute)
+
+> Note: You may provide financial support for this project by donating [via Open Collective](https://opencollective.com/srs-server/contribute). Thank you for your support!
+
+There are two types of people that have contributed code to the SRS project:
 
 * Maintainers: Contribute and maintain important features. SRS always remembers and thanks you by writing your names in stream metadata.
 * [Contributors][authors]: Submit patches, report bugs, add translations, help answer newbie questions, and generally make SRS much better.
@@ -107,7 +131,23 @@ A big THANK YOU goes to:
 
 ## Releases
 
-* 2021-12-01, Release [v4.0-b0][https://github.com/ossrs/srs/releases/tag/v4.0-b0], v4.0-b0, 4.0 beta0, v4.0.201, 144022 lines.
+* 2023-08-02, Release [v4.0-r5](https://github.com/ossrs/srs/releases/tag/v4.0-r5), v4.0-r5, 4.0 release5, v4.0.271, 145574 lines.
+* 2022-11-22, Release [v4.0-r4](https://github.com/ossrs/srs/releases/tag/v4.0-r4), v4.0-r4, 4.0 release4, v4.0.268, 145482 lines.
+* 2022-09-16, Release [v4.0-r3](https://github.com/ossrs/srs/releases/tag/v4.0-r3), v4.0-r3, 4.0 release3, v4.0.265, 145328 lines.
+* 2022-08-24, Release [v4.0-r2](https://github.com/ossrs/srs/releases/tag/v4.0-r2), v4.0-r2, 4.0 release2, v4.0.257, 144890 lines.
+* 2022-06-29, Release [v4.0-r1](https://github.com/ossrs/srs/releases/tag/v4.0-r1), v4.0-r1, 4.0 release1, v4.0.253, 144680 lines.
+* 2022-06-11, Release [v4.0-r0](https://github.com/ossrs/srs/releases/tag/v4.0-r0), v4.0-r0, 4.0 release0, v4.0.252, 144680 lines.
+* 2022-03-19, Release [v4.0-b10](https://github.com/ossrs/srs/releases/tag/v4.0-b10), v4.0-b10, 4.0 beta10, v4.0.251, 144665 lines.
+* 2022-02-15, Release [v4.0-b9](https://github.com/ossrs/srs/releases/tag/v4.0-b9), v4.0-b9, 4.0 beta9, v4.0.245, 144474 lines.
+* 2022-02-11, Release [v4.0-b8](https://github.com/ossrs/srs/releases/tag/v4.0-b8), v4.0-b8, 4.0 beta8, v4.0.241, 144445 lines.
+* 2022-02-09, Release [v4.0-b7](https://github.com/ossrs/srs/releases/tag/v4.0-b7), v4.0-b7, 4.0 beta7, v4.0.240, 144437 lines.
+* 2022-02-04, Release [v4.0-b6](https://github.com/ossrs/srs/releases/tag/v4.0-b6), v4.0-b6, 4.0 beta6, v4.0.238, 144437 lines.
+* 2022-01-30, Release [v4.0-b5](https://github.com/ossrs/srs/releases/tag/v4.0-b5), v4.0-b5, 4.0 beta5, v4.0.236, 144416 lines.
+* 2022-01-17, Release [v4.0-b4](https://github.com/ossrs/srs/releases/tag/v4.0-b4), v4.0-b4, 4.0 beta4, v4.0.230, 144393 lines.
+* 2022-01-13, Release [v4.0-b3](https://github.com/ossrs/srs/releases/tag/v4.0-b3), v4.0-b3, 4.0 beta3, v4.0.229, 144393 lines.
+* 2022-01-03, Release [v4.0-b2](https://github.com/ossrs/srs/releases/tag/v4.0-b2), v4.0-b2, 4.0 beta2, v4.0.215, 144278 lines.
+* 2021-12-19, Release [v4.0-b1](https://github.com/ossrs/srs/releases/tag/v4.0-b1), v4.0-b1, 4.0 beta1, v4.0.206, 144126 lines.
+* 2021-12-01, Release [v4.0-b0](https://github.com/ossrs/srs/releases/tag/v4.0-b0), v4.0-b0, 4.0 beta0, v4.0.201, 144022 lines.
 * 2021-11-15, Release [v4.0.198](https://github.com/ossrs/srs/releases/tag/v4.0.198), 4.0 dev8, v4.0.198, 144010 lines.
 * 2021-11-02, Release [v4.0.191](https://github.com/ossrs/srs/releases/tag/v4.0.191), 4.0 dev7, v4.0.191, 143890 lines.
 * 2021-10-12, Release [v4.0.177](https://github.com/ossrs/srs/releases/tag/v4.0.177), 4.0 dev6, v4.0.177, 143686 lines.
@@ -399,8 +439,5 @@ Winlin
 [v4_EN_Contact]: https://github.com/ossrs/srs/wiki/v4_EN_Contact
 
 [LICENSE]: https://github.com/ossrs/srs/blob/4.0release/LICENSE
-[LicenseMixing]: https://github.com/ossrs/srs/wiki/LicenseMixing
+[LicenseMixing]: https://ossrs.net/lts/zh-cn/license
 
-[release2]: https://github.com/ossrs/srs/wiki/v4_CN_Product#release20
-[release3]: https://github.com/ossrs/srs/wiki/v4_CN_Product#release30
-[release4]: https://github.com/ossrs/srs/wiki/v4_CN_Product#release40

@@ -29,7 +29,7 @@
 #define RTMP_SIG_SRS_DOMAIN "ossrs.net"
 
 // The current stable release.
-#define VERSION_STABLE 3
+#define VERSION_STABLE 4
 #define VERSION_STABLE_BRANCH SRS_XSTR(VERSION_STABLE) ".0release"
 
 // For 32bit os, 2G big file limit for unistd io,
@@ -94,7 +94,7 @@ typedef SrsCplxError* srs_error_t;
 
 #include <string>
 // The context ID, it default to a string object, we can also use other objects.
-// @remark User can directly user string as SrsContextId, we user struct to ensure the context is an object.
+// @remark User can directly use string as SrsContextId, we use struct to ensure the context is an object.
 #if 1
 class _SrsContextId
 {

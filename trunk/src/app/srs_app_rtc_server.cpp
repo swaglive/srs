@@ -6,6 +6,7 @@
 
 #include <srs_app_rtc_server.hpp>
 
+#include <set>
 using namespace std;
 
 #include <srs_app_config.hpp>
@@ -149,39 +150,96 @@ bool srs_is_rtcp(const uint8_t* data, size_t len)
     return (len >= 12) && (data[0] & 0x80) && (data[1] >= 192 && data[1] <= 223);
 }
 
-static std::vector<std::string> get_candidate_ips()
+srs_error_t api_server_as_candidates(string api, set<string>& candidate_ips)
 {
-    std::vector<std::string> candidate_ips;
+    srs_error_t err = srs_success;
 
+    if (api.empty() || !_srs_config->get_api_as_candidates()) {
+        return err;
+    }
+
+    string hostname = api;
+    if (hostname.empty() || hostname == SRS_CONSTS_LOCALHOST_NAME) {
+        return err;
+    }
+    if (hostname == SRS_CONSTS_LOCALHOST || hostname == SRS_CONSTS_LOOPBACK || hostname == SRS_CONSTS_LOOPBACK6) {
+        return err;
+    }
+
+    // Whether add domain name.
+    if (!srs_is_ipv4(hostname) && _srs_config->get_keep_api_domain()) {
+        candidate_ips.insert(hostname);
+    }
+
+    // Try to parse the domain name if not IP.
+    if (!srs_is_ipv4(hostname) && _srs_config->get_resolve_api_domain()) {
+        int family = 0;
+        string ip = srs_dns_resolve(hostname, family);
+        if (ip.empty() || ip == SRS_CONSTS_LOCALHOST || ip == SRS_CONSTS_LOOPBACK || ip == SRS_CONSTS_LOOPBACK6) {
+            return err;
+        }
+
+        // Try to add the API server ip as candidates.
+        candidate_ips.insert(ip);
+    }
+
+    // If hostname is IP, use it.
+    if (srs_is_ipv4(hostname)) {
+        candidate_ips.insert(hostname);
+    }
+
+    return err;
+}
+
+static set<string> discover_candidates(SrsRtcUserConfig* ruc)
+{
+    srs_error_t err = srs_success;
+
+    // Try to discover the eip as candidate, specified by user.
+    set<string> candidate_ips;
+    if (!ruc->eip_.empty()) {
+        candidate_ips.insert(ruc->eip_);
+    }
+
+    // Try to discover from api of request, if api_as_candidates enabled.
+    if ((err = api_server_as_candidates(ruc->req_->host, candidate_ips)) != srs_success) {
+        srs_warn("ignore discovering ip from api %s, err %s", ruc->req_->host.c_str(), srs_error_summary(err).c_str());
+        srs_freep(err);
+    }
+
+    // If not * or 0.0.0.0, use the candidate as exposed IP.
     string candidate = _srs_config->get_rtc_server_candidates();
     if (candidate != "*" && candidate != "0.0.0.0") {
-        candidate_ips.push_back(candidate);
+        candidate_ips.insert(candidate);
         return candidate_ips;
     }
 
-    // For * or 0.0.0.0, auto discovery expose ip addresses.
-    std::vector<SrsIPAddress*>& ips = srs_get_local_ips();
+    // All automatically detected IP list.
+    vector<SrsIPAddress*>& ips = srs_get_local_ips();
     if (ips.empty()) {
         return candidate_ips;
     }
 
-    // We try to find the best match candidates, no loopback.
-    string family = _srs_config->get_rtc_server_ip_family();
-    for (int i = 0; i < (int)ips.size(); ++i) {
-        SrsIPAddress* ip = ips[i];
-        if (ip->is_loopback) {
-            continue;
-        }
+    // Discover from local network interface addresses.
+    if (_srs_config->get_use_auto_detect_network_ip()) {
+        // We try to find the best match candidates, no loopback.
+        string family = _srs_config->get_rtc_server_ip_family();
+        for (int i = 0; i < (int) ips.size(); ++i) {
+            SrsIPAddress* ip = ips[i];
+            if (ip->is_loopback) {
+                continue;
+            }
 
-        if (family == "ipv4" && !ip->is_ipv4) {
-            continue;
-        }
-        if (family == "ipv6" && ip->is_ipv4) {
-            continue;
-        }
+            if (family == "ipv4" && !ip->is_ipv4) {
+                continue;
+            }
+            if (family == "ipv6" && ip->is_ipv4) {
+                continue;
+            }
 
-        candidate_ips.push_back(ip->ip);
-        srs_trace("Best matched ip=%s, ifname=%s", ip->ip.c_str(), ip->ifname.c_str());
+            candidate_ips.insert(ip->ip);
+            srs_trace("Best matched ip=%s, ifname=%s", ip->ip.c_str(), ip->ifname.c_str());
+        }
     }
 
     if (!candidate_ips.empty()) {
@@ -195,15 +253,15 @@ static std::vector<std::string> get_candidate_ips()
             continue;
         }
 
-        candidate_ips.push_back(ip->ip);
+        candidate_ips.insert(ip->ip);
         srs_trace("No best matched, use first ip=%s, ifname=%s", ip->ip.c_str(), ip->ifname.c_str());
         return candidate_ips;
     }
 
-    // We use the first one.
+    // We use the first one, to make sure there will be at least one CANDIDATE.
     if (candidate_ips.empty()) {
         SrsIPAddress* ip = ips[0];
-        candidate_ips.push_back(ip->ip);
+        candidate_ips.insert(ip->ip);
         srs_warn("No best matched, use first ip=%s, ifname=%s", ip->ip.c_str(), ip->ifname.c_str());
         return candidate_ips;
     }
@@ -232,6 +290,7 @@ SrsRtcUserConfig::SrsRtcUserConfig()
     req_ = new SrsRequest();
     publish_ = false;
     dtls_ = srtp_ = true;
+    audio_before_video_ = false;
 }
 
 SrsRtcUserConfig::~SrsRtcUserConfig()
@@ -447,6 +506,16 @@ srs_error_t SrsRtcServer::listen_api()
         return srs_error_wrap(err, "handle publish");
     }
 
+    // Generally, WHIP is a publishing protocol, but it can be also used as playing.
+    if ((err = http_api_mux->handle("/rtc/v1/whip/", new SrsGoApiRtcWhip(this))) != srs_success) {
+        return srs_error_wrap(err, "handle whip");
+    }
+
+    // We create another mount, to support play with the same query string as publish.
+    if ((err = http_api_mux->handle("/rtc/v1/whip-play/", new SrsGoApiRtcWhip(this))) != srs_success) {
+        return srs_error_wrap(err, "handle whip play");
+    }
+
 #ifdef SRS_SIMULATOR
     if ((err = http_api_mux->handle("/rtc/v1/nack/", new SrsGoApiRtcNACK(this))) != srs_success) {
         return srs_error_wrap(err, "handle nack");
@@ -524,19 +593,17 @@ srs_error_t SrsRtcServer::do_create_session(SrsRtcUserConfig* ruc, SrsSdp& local
     local_sdp.set_fingerprint(_srs_rtc_dtls_certificate->get_fingerprint());
 
     // We allows to mock the eip of server.
-    if (!ruc->eip_.empty()) {
-        string host;
-        int port = _srs_config->get_rtc_server_listen();
-        srs_parse_hostport(ruc->eip_, host, port);
-
-        local_sdp.add_candidate(host, port, "host");
-        srs_trace("RTC: Use candidate mock_eip %s as %s:%d", ruc->eip_.c_str(), host.c_str(), port);
-    } else {
-        std::vector<string> candidate_ips = get_candidate_ips();
-        for (int i = 0; i < (int)candidate_ips.size(); ++i) {
-            local_sdp.add_candidate(candidate_ips[i], _srs_config->get_rtc_server_listen(), "host");
+    if (true) {
+        int listen_port = _srs_config->get_rtc_server_listen();
+        set<string> candidates = discover_candidates(ruc);
+        for (set<string>::iterator it = candidates.begin(); it != candidates.end(); ++it) {
+            string hostname; int port = listen_port;
+            srs_parse_hostport(*it, hostname, port);
+            local_sdp.add_candidate(hostname, port, "host");
         }
-        srs_trace("RTC: Use candidates %s", srs_join_vector_string(candidate_ips, ", ").c_str());
+
+        vector<string> v = vector<string>(candidates.begin(), candidates.end());
+        srs_trace("RTC: Use candidates %s", srs_join_vector_string(v, ", ").c_str());
     }
 
     // Setup the negotiate DTLS by config.
@@ -698,7 +765,7 @@ srs_error_t RtcServerAdapter::initialize()
     return err;
 }
 
-srs_error_t RtcServerAdapter::run()
+srs_error_t RtcServerAdapter::run(SrsWaitGroup* wg)
 {
     srs_error_t err = srs_success;
 

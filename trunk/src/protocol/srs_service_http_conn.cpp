@@ -76,6 +76,8 @@ srs_error_t SrsHttpParser::parse_message(ISrsReader* reader, ISrsHttpMessage** p
     p_body_start = p_header_tail = NULL;
     // We must reset the field name and value, because we may get a partial value in on_header_value.
     field_name = field_value = "";
+    // Reset the url.
+    url = "";
     // The header of the request.
     srs_freep(header);
     header = new SrsHttpHeader();
@@ -220,7 +222,8 @@ int SrsHttpParser::on_url(http_parser* parser, const char* at, size_t length)
     srs_assert(obj);
     
     if (length > 0) {
-        obj->url = string(at, (int)length);
+        // Note that this function might be called for multiple times, and we got pieces of content.
+        obj->url.append(at, (int)length);
     }
 
     // When header parsed, we must save the position of start for body,
@@ -263,12 +266,12 @@ int SrsHttpParser::on_header_value(http_parser* parser, const char* at, size_t l
     
     if (length > 0) {
         obj->field_value.append(at, (int)length);
-    }
 
-    // When header parsed, we must save the position of start for body,
-    // because we have to consume the header in buffer.
-    // @see https://github.com/ossrs/srs/issues/1508
-    obj->p_header_tail = at;
+        // When header parsed, we must save the position of start for body,
+        // because we have to consume the header in buffer.
+        // @see https://github.com/ossrs/srs/issues/1508
+        obj->p_header_tail = at;
+    }
     
     srs_info("Header value(%d bytes): %.*s", (int)length, (int)length, at);
     return 0;
@@ -755,7 +758,7 @@ srs_error_t SrsHttpResponseWriter::write(char* data, int size)
     // check the bytes send and content length.
     written += size;
     if (content_length != -1 && written > content_length) {
-        return srs_error_new(ERROR_HTTP_CONTENT_LENGTH, "overflow writen=%d, max=%d", (int)written, (int)content_length);
+        return srs_error_new(ERROR_HTTP_CONTENT_LENGTH, "overflow writen=%" PRId64 ", max=%" PRId64, written, content_length);
     }
     
     // ignore NULL content.

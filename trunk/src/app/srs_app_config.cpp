@@ -50,13 +50,16 @@ const char* _srs_version = "XCORE-" RTMP_SIG_SRS_SERVER;
 #define SRS_CONF_PERFER_TRUE(conf_arg) conf_arg != "off"
 
 // default config file.
-#define SRS_CONF_DEFAULT_COFNIG_FILE "conf/srs.conf"
+#define SRS_CONF_DEFAULT_COFNIG_FILE SRS_DEFAULT_CONFIG
 
 // '\n'
 #define SRS_LF (char)SRS_CONSTS_LF
 
 // '\r'
 #define SRS_CR (char)SRS_CONSTS_CR
+
+// Overwrite the config by env.
+#define SRS_OVERWRITE_BY_ENV_SECONDS(key) if (getenv(key)) return ::atoi(getenv(key)) * SRS_UTIME_SECONDS
 
 /**
  * dumps the ingest/transcode-engine in @param dir to amf0 object @param engine.
@@ -1982,23 +1985,22 @@ srs_error_t SrsConfig::parse_options(int argc, char** argv)
     srs_trace(_srs_version);
 
     // Try config files as bellow:
-    //      config_file Specified by user, like conf/srs.conf
-    //      try_docker_config Guess by SRS, like conf/docker.conf
-    //      try_fhs_config For FHS, try /etc/srs/srs.conf first, @see https://github.com/ossrs/srs/pull/2711
-    if (!srs_path_exists(config_file)) {
+    //      User specified config(not empty), like user/docker.conf
+    //      If user specified *docker.conf, try *srs.conf, like user/srs.conf
+    //      Try the default srs config, defined as SRS_CONF_DEFAULT_COFNIG_FILE, like conf/srs.conf
+    //      Try config for FHS, like /etc/srs/srs.conf @see https://github.com/ossrs/srs/pull/2711
+    if (true) {
         vector<string> try_config_files;
         if (!config_file.empty()) {
             try_config_files.push_back(config_file);
-            if (srs_string_ends_with(config_file, "docker.conf")) {
-                try_config_files.push_back(srs_string_replace(config_file, "docker.conf", "srs.conf"));
-            }
+        }
+        if (srs_string_ends_with(config_file, "docker.conf")) {
+            try_config_files.push_back(srs_string_replace(config_file, "docker.conf", "srs.conf"));
         }
         try_config_files.push_back(SRS_CONF_DEFAULT_COFNIG_FILE);
-        if (srs_string_ends_with(SRS_CONF_DEFAULT_COFNIG_FILE, "docker.conf")) {
-            try_config_files.push_back(srs_string_replace(SRS_CONF_DEFAULT_COFNIG_FILE, "docker.conf", "srs.conf"));
-        }
         try_config_files.push_back("/etc/srs/srs.conf");
 
+        // Match the first exists file.
         string exists_config_file;
         for (int i = 0; i < (int) try_config_files.size(); i++) {
             string try_config_file = try_config_files.at(i);
@@ -2467,12 +2469,12 @@ srs_error_t SrsConfig::check_normal_config()
             && n != "max_connections" && n != "daemon" && n != "heartbeat"
             && n != "http_api" && n != "stats" && n != "vhost" && n != "pithy_print_ms"
             && n != "http_server" && n != "stream_caster" && n != "rtc_server" && n != "srt_server"
-            && n != "utc_time" && n != "work_dir" && n != "asprocess"
+            && n != "utc_time" && n != "work_dir" && n != "asprocess" && n != "server_id"
             && n != "ff_log_level" && n != "grace_final_wait" && n != "force_grace_quit"
             && n != "grace_start_wait" && n != "empty_ip_ok" && n != "disable_daemon_for_docker"
             && n != "inotify_auto_reload" && n != "auto_reload_for_docker" && n != "tcmalloc_release_rate"
-            && n != "query_latest_version"
-            && n != "circuit_breaker" && n != "is_full"
+            && n != "query_latest_version" && n != "first_wait_for_qlv"
+            && n != "circuit_breaker" && n != "is_full" && n != "in_docker"
             ) {
             return srs_error_new(ERROR_SYSTEM_CONFIG_INVALID, "illegal directive %s", n.c_str());
         }
@@ -2543,7 +2545,8 @@ srs_error_t SrsConfig::check_normal_config()
             string n = conf->at(i)->name;
             if (n != "enabled" && n != "listen" && n != "dir" && n != "candidate" && n != "ecdsa"
                 && n != "encrypt" && n != "reuseport" && n != "merge_nalus" && n != "black_hole"
-                && n != "ip_family") {
+                && n != "ip_family" && n != "api_as_candidates" && n != "resolve_api_domain"
+                && n != "keep_api_domain" && n != "use_auto_detect_network_ip") {
                 return srs_error_new(ERROR_SYSTEM_CONFIG_INVALID, "illegal rtc_server.%s", n.c_str());
             }
         }
@@ -3000,6 +3003,18 @@ bool SrsConfig::get_daemon()
     return SRS_CONF_PERFER_TRUE(conf->arg0());
 }
 
+bool SrsConfig::get_in_docker()
+{
+    static bool DEFAULT = false;
+
+    SrsConfDirective* conf = root->get("in_docker");
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    return SRS_CONF_PERFER_FALSE(conf->arg0());
+}
+
 bool SrsConfig::is_full_config()
 {
     static bool DEFAULT = false;
@@ -3015,6 +3030,90 @@ bool SrsConfig::is_full_config()
 SrsConfDirective* SrsConfig::get_root()
 {
     return root;
+}
+
+string srs_server_id_path(string pid_file)
+{
+    string path = srs_string_replace(pid_file, ".pid", ".id");
+    if (!srs_string_ends_with(path, ".id")) {
+        path += ".id";
+    }
+    return path;
+}
+
+string srs_try_read_file(string path) {
+    srs_error_t err = srs_success;
+
+    SrsFileReader r;
+    if ((err = r.open(path)) != srs_success) {
+        srs_freep(err);
+        return "";
+    }
+
+    static char buf[1024];
+    ssize_t nn = 0;
+    if ((err = r.read(buf, sizeof(buf), &nn)) != srs_success) {
+        srs_freep(err);
+        return "";
+    }
+
+    if (nn > 0) {
+        return string(buf, nn);
+    }
+    return "";
+}
+
+void srs_try_write_file(string path, string content) {
+    srs_error_t err = srs_success;
+
+    SrsFileWriter w;
+    if ((err = w.open(path)) != srs_success) {
+        srs_freep(err);
+        return;
+    }
+
+    if ((err = w.write((void*)content.data(), content.length(), NULL)) != srs_success) {
+        srs_freep(err);
+        return;
+    }
+}
+
+string SrsConfig::get_server_id()
+{
+    static string DEFAULT = "";
+
+    // Try to read DEFAULT from server id file.
+    if (DEFAULT.empty()) {
+        DEFAULT = srs_try_read_file(srs_server_id_path(get_pid_file()));
+    }
+
+    // Generate a random one if empty.
+    if (DEFAULT.empty()) {
+        DEFAULT = srs_generate_stat_vid();
+    }
+
+    // Get the server id from env, config or DEFAULT.
+    string server_id;
+
+    if (getenv("SRS_SERVER_ID")) {
+        server_id = getenv("SRS_SERVER_ID");
+    }
+
+    SrsConfDirective* conf = root->get("server_id");
+    if (conf) {
+        server_id = conf->arg0();
+    }
+
+    if (server_id.empty()) {
+        server_id = DEFAULT;
+    }
+
+    // Write server id to tmp file.
+    if (!server_id.empty()) {
+        srs_try_write_file(srs_server_id_path(get_pid_file()), server_id);
+    }
+
+    return server_id;
 }
 
 int SrsConfig::get_max_connections()
@@ -3115,6 +3214,20 @@ bool SrsConfig::whether_query_latest_version()
     }
 
     return SRS_CONF_PERFER_TRUE(conf->arg0());
+}
+
+srs_utime_t SrsConfig::first_wait_for_qlv()
+{
+    SRS_OVERWRITE_BY_ENV_SECONDS("SRS_FIRST_WAIT_FOR_QLV");
+
+    static srs_utime_t DEFAULT = 5 * 60 * SRS_UTIME_SECONDS;
+
+    SrsConfDirective* conf = root->get("first_wait_for_qlv");
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    return ::atoi(conf->arg0().c_str()) * SRS_UTIME_SECONDS;
 }
 
 bool SrsConfig::empty_ip_ok()
@@ -3531,6 +3644,74 @@ std::string SrsConfig::get_rtc_server_candidates()
     }
 
     return conf->arg0();
+}
+
+bool SrsConfig::get_api_as_candidates()
+{
+    static bool DEFAULT = true;
+
+    SrsConfDirective* conf = root->get("rtc_server");
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    conf = conf->get("api_as_candidates");
+    if (!conf || conf->arg0().empty()) {
+        return DEFAULT;
+    }
+
+    return SRS_CONF_PERFER_TRUE(conf->arg0());
+}
+
+bool SrsConfig::get_resolve_api_domain()
+{
+    static bool DEFAULT = true;
+
+    SrsConfDirective* conf = root->get("rtc_server");
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    conf = conf->get("resolve_api_domain");
+    if (!conf || conf->arg0().empty()) {
+        return DEFAULT;
+    }
+
+    return SRS_CONF_PERFER_TRUE(conf->arg0());
+}
+
+bool SrsConfig::get_keep_api_domain()
+{
+    static bool DEFAULT = false;
+
+    SrsConfDirective* conf = root->get("rtc_server");
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    conf = conf->get("keep_api_domain");
+    if (!conf || conf->arg0().empty()) {
+        return DEFAULT;
+    }
+
+    return SRS_CONF_PERFER_FALSE(conf->arg0());
+}
+
+bool SrsConfig::get_use_auto_detect_network_ip()
+{
+    static bool DEFAULT = true;
+
+    SrsConfDirective* conf = root->get("rtc_server");
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    conf = conf->get("use_auto_detect_network_ip");
+    if (!conf || conf->arg0().empty()) {
+        return DEFAULT;
+    }
+
+    return SRS_CONF_PERFER_TRUE(conf->arg0());
 }
 
 std::string SrsConfig::get_rtc_server_ip_family()

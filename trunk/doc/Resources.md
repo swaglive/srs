@@ -45,6 +45,15 @@ Other API used by [ossrs.net](https://ossrs.net):
 * `/im-service/v1/` The latest available version API, by IM.
 * `/code-service/v1/` The latest available version API, by Code verification.
 
+The statistic path for [ossrs.net](https://ossrs.net):
+
+* `/srs/xxx` The GitHub pages for [srs](https://github.com/ossrs/srs)
+* `/wiki/xxx` The GitHub wiki for [srs](https://github.com/ossrs/srs/wiki)
+* `/release/xxx` The pages for [ossrs.net](https://ossrs.net)
+* `/console/xxx` The pages for [console](http://ossrs.net/console/)
+* `/player/xxx` The pages for [players and publishers](http://ossrs.net/players/)
+* `/k8s/xxx` The template and repository deploy by K8s, like [srs-k8s-template](https://github.com/ossrs/srs-k8s-template)
+
 ## Mirrors
 
 Gitee: [https://gitee.com/ossrs/srs][gitee], the GIT usage([CN][v4_CN_Git], [EN][v4_EN_Git])
@@ -309,7 +318,7 @@ git clone https://github.com/ossrs/srs.git
 [v4_EN_Contact]: https://github.com/ossrs/srs/wiki/v4_EN_Contact
 
 [LICENSE]: https://github.com/ossrs/srs/blob/4.0release/LICENSE
-[LicenseMixing]: https://github.com/ossrs/srs/wiki/LicenseMixing
+[LicenseMixing]: https://ossrs.net/lts/zh-cn/license
 
 [release2]: https://github.com/ossrs/srs/wiki/v4_CN_Product#release20
 [release3]: https://github.com/ossrs/srs/wiki/v4_CN_Product#release30

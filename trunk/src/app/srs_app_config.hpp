@@ -382,10 +382,14 @@ public:
     // If  true, SRS will run in daemon mode, fork and fork to reap the
     // grand-child process to init process.
     virtual bool get_daemon();
+    // Whether srs in docker.
+    virtual bool get_in_docker();
 private:
     // Whether user use full.conf
     virtual bool is_full_config();
 public:
+    // Get the server id, generated a random one if not configured.
+    virtual std::string get_server_id();
     // Get the max connections limit of system.
     // If  exceed the max connection, SRS will disconnect the connection.
     // @remark, linux will limit the connections of each process,
@@ -417,6 +421,7 @@ public:
     virtual bool get_asprocess();
     // Whether query the latest available version of SRS.
     virtual bool whether_query_latest_version();
+    virtual srs_utime_t first_wait_for_qlv();
     // Whether empty client IP is ok.
     virtual bool empty_ip_ok();
     // Get the start wait in ms for gracefully quit.
@@ -467,6 +472,10 @@ public:
     virtual bool get_rtc_server_enabled(SrsConfDirective* conf);
     virtual int get_rtc_server_listen();
     virtual std::string get_rtc_server_candidates();
+    virtual bool get_api_as_candidates();
+    virtual bool get_resolve_api_domain();
+    virtual bool get_keep_api_domain();
+    virtual bool get_use_auto_detect_network_ip();
     virtual std::string get_rtc_server_ip_family();
     virtual bool get_rtc_server_ecdsa();
     virtual bool get_rtc_server_encrypt();
